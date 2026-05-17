@@ -1,0 +1,31 @@
+# Core
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+pydantic==2.10.3
+pydantic-settings==2.6.1
+python-multipart==0.0.17
+
+# AI / LangChain
+langchain==0.3.13
+langchain-community==0.3.13
+langchain-groq==0.2.3
+langchain-huggingface==0.1.2
+chromadb==0.5.23
+sentence-transformers==3.3.1
+
+# PDF processing
+pypdf==5.1.0
+
+# Database
+aiosqlite==0.20.0
+
+# Auth
+firebase-admin==6.6.0
+
+# HTTP
+httpx==0.28.1
+
+# Testing
+pytest==8.3.4
+pytest-asyncio==0.24.0
+pytest-mock==3.14.0
