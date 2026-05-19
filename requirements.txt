@@ -8,6 +8,7 @@ python-multipart==0.0.17
 # AI / LangChain
 langchain==0.3.13
 langchain-community==0.3.13
+langchain-chroma==0.1.4
 langchain-groq==0.2.3
 langchain-huggingface==0.1.2
 chromadb==0.5.23
