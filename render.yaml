@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: careview-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false                  # set manually in Render dashboard
+      - key: FIREBASE_PROJECT_ID
+        value: parent-health-app
+      - key: CHROMA_PERSIST_DIR
+        value: ./data/chroma
+      - key: SQLITE_DB_PATH
+        value: ./data/careview.db
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        value: ""                    # set if you upload a service-account.json
+    healthCheckPath: /api/v1/health
+    autoDeploy: true
