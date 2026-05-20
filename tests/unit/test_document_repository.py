@@ -35,6 +35,7 @@ async def test_should_insert_document_with_correct_values():
     assert params[1] == "parent_1"
     assert params[2] == "report.pdf"
     assert params[4] == 5
+    assert params[6] == "indexed"
     db.commit.assert_called_once()
 
 
@@ -44,6 +45,7 @@ async def test_should_return_documents_for_parent():
     row.__getitem__ = lambda self, k: {
         "id": "doc-1", "parent_id": "parent_1",
         "filename": "labs.pdf", "upload_date": "2025-01-10", "chunk_count": 3,
+        "processing_status": "indexed", "extraction_error": None, "summary": "Indexed report",
     }[k]
 
     mock_cursor = AsyncMock()
@@ -61,6 +63,7 @@ async def test_should_return_documents_for_parent():
     assert results[0].document_id == "doc-1"
     assert results[0].filename == "labs.pdf"
     assert results[0].chunk_count == 3
+    assert results[0].processing_status == "indexed"
 
 
 @pytest.mark.asyncio

@@ -45,6 +45,22 @@ class InsightRequest(BaseModel):
 class InsightResponse(BaseModel):
     insight: str
     parent_id: str
+    report_count: int = 0
+    indexed_report_count: int = 0
+
+
+class InsightRecord(BaseModel):
+    insight_id: str
+    parent_id: str
+    query: str
+    insight: str
+    source_document_ids: list[str]
+    model: str
+    created_at: str
+
+
+class InsightHistoryResponse(BaseModel):
+    insights: list[InsightRecord]
 
 
 # ── Documents ─────────────────────────────────────────────────────────────────
@@ -55,6 +71,9 @@ class DocumentMetadata(BaseModel):
     filename: str
     upload_date: str
     chunk_count: int
+    processing_status: Literal["indexed", "queued", "failed"] = "indexed"
+    extraction_error: str | None = None
+    summary: str | None = None
 
 
 class DocumentListResponse(BaseModel):
