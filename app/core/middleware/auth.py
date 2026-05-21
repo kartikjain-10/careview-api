@@ -14,7 +14,6 @@ from app.core.config import Settings
 # Paths whose prefix requires a valid Firebase Bearer token
 PROTECTED_PREFIXES = (
     "/api/v1/wearable",
-    "/api/v1/insights",
     "/api/v1/whatsapp",
 )
 
