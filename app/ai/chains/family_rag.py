@@ -141,18 +141,29 @@ def _retrieve_docs(
     vectorstore: Chroma,
     query: str,
     member_ids: list[str],
+    group_id: str = "",
     k: int = 8,
 ) -> tuple[str, list[dict]]:
-    """Search ChromaDB across all family members and return text + source chips."""
+    """Search ChromaDB across all family members and return text + source chips.
+
+    Filters by both parent_id AND group_id for defence-in-depth isolation.
+    Even if a member UUID were guessed, the group_id check prevents cross-family access.
+    """
     if not member_ids or vectorstore is None:
         return "No indexed health documents found.", []
 
     try:
-        # Filter by any of the family member IDs
-        where_clause: dict[str, Any] = (
+        # Build filter: scoped to this family's members + group
+        member_filter: dict[str, Any] = (
             {"parent_id": {"$in": member_ids}}
             if len(member_ids) > 1
             else {"parent_id": member_ids[0]}
+        )
+        # Add group_id as a second isolation layer when available
+        where_clause: dict[str, Any] = (
+            {"$and": [member_filter, {"group_id": group_id}]}
+            if group_id
+            else member_filter
         )
         retriever = vectorstore.as_retriever(
             search_kwargs={"k": k, "filter": where_clause}
@@ -191,7 +202,10 @@ def _retrieve_docs(
         return rag_text, sources
 
     except Exception as exc:
-        return f"Report retrieval failed ({exc}). Do not claim to have read uploaded reports.", []
+        # Log server-side; never expose internal details to the LLM prompt
+        import logging
+        logging.getLogger(__name__).error("RAG retrieval error: %s", exc, exc_info=True)
+        return "Report retrieval is temporarily unavailable. Do not claim to have read uploaded reports.", []
 
 
 # ── Parsed response ───────────────────────────────────────────────────────────
@@ -268,6 +282,7 @@ class FamilyRAGChain:
         medicine_map: dict[str, list[dict]],
         history: list[dict] | None = None,
         active_member_id: str | None = None,
+        group_id: str = "",
     ) -> NoriRAGResponse:
         member_ids = [m["id"] for m in members]
         member_names = {
@@ -284,7 +299,7 @@ class FamilyRAGChain:
 
         family_ctx = _build_family_context(members)
         live_ctx = _build_live_context(wearable_map, medicine_map, member_names)
-        rag_text, rag_sources = _retrieve_docs(self._vs, query, search_ids)
+        rag_text, rag_sources = _retrieve_docs(self._vs, query, search_ids, group_id=group_id)
 
         system_prompt = _BASE_SYSTEM.format(
             family_context=family_ctx,

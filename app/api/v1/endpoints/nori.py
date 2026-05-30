@@ -110,6 +110,7 @@ async def nori_chat(
         medicine_map=medicine_map,
         history=history,
         active_member_id=body.profile_id,
+        group_id=group["id"],
     )
 
     return NoriChatResponse(

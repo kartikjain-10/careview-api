@@ -74,9 +74,14 @@ async def upload_document(
             raise HTTPException(status_code=404, detail="Family member not found")
 
     # Persist raw PDF to disk
-    upload_dir = os.path.join("data", "uploads", parent_id)
+    upload_dir = os.path.realpath(os.path.join("data", "uploads", parent_id))
     os.makedirs(upload_dir, exist_ok=True)
-    file_path = os.path.join(upload_dir, file.filename)
+    # Sanitize filename — strip path components to prevent traversal attacks
+    safe_filename = os.path.basename(file.filename or "upload.pdf")
+    file_path = os.path.join(upload_dir, safe_filename)
+    # Double-check resolved path stays inside the intended upload directory
+    if not os.path.realpath(file_path).startswith(upload_dir + os.sep):
+        raise HTTPException(status_code=422, detail="Invalid filename")
 
     contents = await file.read()
     with open(file_path, "wb") as f:

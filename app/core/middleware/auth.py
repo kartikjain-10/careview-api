@@ -9,7 +9,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from app.core.config import Settings
+from app.core.config import Settings, settings as _settings
 
 # Always-public paths — no token required
 _PUBLIC_PREFIXES = (
@@ -73,19 +73,26 @@ class FirebaseAuthMiddleware(BaseHTTPMiddleware):
 
         token = auth_header[len("Bearer "):]
 
+        # ── Demo-auth bypass ─────────────────────────────────────────────────
+        # Only allowed when ALLOW_DEMO_AUTH=true is explicitly set.
+        # This must NEVER be enabled in production.
+        if _settings.allow_demo_auth and token.startswith("demo-"):
+            email = token.replace("demo-", "")
+            request.state.uid = token
+            request.state.email = email if "@" in email else f"{email}@demo.local"
+            request.state.name = email.split("@")[0]
+            request.state.firebase_verified = False
+            return await call_next(request)
+
+        # ── Firebase token verification ──────────────────────────────────────
         try:
             try:
                 app = firebase_admin.get_app()
                 decoded = firebase_admin.auth.verify_id_token(token, app=app)
             except ValueError:
-                if token.startswith("demo-"):
-                    email = token.replace("demo-", "")
-                    request.state.uid = token
-                    request.state.email = email if "@" in email else f"{email}@demo.local"
-                    request.state.name = email.split("@")[0]
-                    request.state.firebase_verified = False
-                    return await call_next(request)
-                decoded = firebase_admin.auth.verify_id_token(token)
+                # Firebase not initialized (no credentials file) — reject
+                return JSONResponse({"detail": "Authentication service unavailable"}, status_code=503)
+
             request.state.uid = decoded["uid"]
             request.state.email = decoded.get("email", "")
             request.state.name = decoded.get("name", decoded.get("email", "").split("@")[0])

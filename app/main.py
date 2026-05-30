@@ -38,12 +38,15 @@ def create_app() -> FastAPI:
         redoc_url="/redoc",
     )
 
+    # De-duplicate origins and enumerate methods/headers explicitly.
+    # Wildcard methods/headers with allow_credentials=True is blocked by browsers (CORS spec).
+    origins = list({settings.app_base_url, "http://localhost:3000"})
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000", settings.app_base_url],
+        allow_origins=origins,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "Accept"],
     )
     app.add_middleware(FirebaseAuthMiddleware)
 
