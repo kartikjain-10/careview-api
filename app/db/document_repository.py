@@ -18,9 +18,10 @@ class DocumentRepository:
             """
             INSERT INTO documents (
                 id, parent_id, filename, upload_date, chunk_count, file_path,
-                processing_status, extraction_error, summary
+                processing_status, extraction_error, summary, report_type,
+                report_date, provider, status
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 metadata.document_id,
@@ -32,15 +33,34 @@ class DocumentRepository:
                 metadata.processing_status,
                 metadata.extraction_error,
                 metadata.summary,
+                metadata.report_type,
+                metadata.report_date,
+                metadata.provider,
+                metadata.status,
             ),
         )
         await self._db.commit()
+
+    async def get_document(self, document_id: str) -> DocumentMetadata | None:
+        async with self._db.execute(
+            """
+            SELECT id, parent_id, filename, upload_date, chunk_count,
+                   processing_status, extraction_error, summary,
+                   report_type, report_date, provider, status
+            FROM documents
+            WHERE id = ?
+            """,
+            (document_id,),
+        ) as cursor:
+            row = await cursor.fetchone()
+        return self._row_to_metadata(row) if row else None
 
     async def get_documents_by_parent(self, parent_id: str) -> List[DocumentMetadata]:
         async with self._db.execute(
             """
             SELECT id, parent_id, filename, upload_date, chunk_count,
-                   processing_status, extraction_error, summary
+                   processing_status, extraction_error, summary,
+                   report_type, report_date, provider, status
             FROM   documents
             WHERE  parent_id = ?
             ORDER  BY upload_date DESC
@@ -49,19 +69,37 @@ class DocumentRepository:
         ) as cursor:
             rows = await cursor.fetchall()
 
-        return [
-            DocumentMetadata(
-                document_id=row["id"],
-                parent_id=row["parent_id"],
-                filename=row["filename"],
-                upload_date=row["upload_date"],
-                chunk_count=row["chunk_count"],
-                processing_status=row["processing_status"],
-                extraction_error=row["extraction_error"],
-                summary=row["summary"],
-            )
-            for row in rows
-        ]
+        return [self._row_to_metadata(row) for row in rows]
+
+    async def update_summary(self, document_id: str, summary: str) -> DocumentMetadata | None:
+        await self._db.execute(
+            "UPDATE documents SET summary = ? WHERE id = ?",
+            (summary, document_id),
+        )
+        await self._db.commit()
+        return await self.get_document(document_id)
+
+    def _row_to_metadata(self, row: aiosqlite.Row) -> DocumentMetadata:
+        def value(key: str, default=None):
+            try:
+                return row[key]
+            except (KeyError, IndexError):
+                return default
+
+        return DocumentMetadata(
+            document_id=value("id"),
+            parent_id=value("parent_id"),
+            filename=value("filename"),
+            upload_date=value("upload_date"),
+            chunk_count=value("chunk_count"),
+            processing_status=value("processing_status", "indexed"),
+            extraction_error=value("extraction_error"),
+            summary=value("summary"),
+            report_type=value("report_type"),
+            report_date=value("report_date"),
+            provider=value("provider"),
+            status=value("status", "active") or "active",
+        )
 
     async def insert_insight(
         self,

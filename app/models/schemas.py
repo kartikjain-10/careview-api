@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import Literal
+from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 
@@ -72,8 +72,12 @@ class DocumentMetadata(BaseModel):
     upload_date: str
     chunk_count: int
     processing_status: Literal["indexed", "queued", "failed"] = "indexed"
-    extraction_error: str | None = None
-    summary: str | None = None
+    extraction_error: Optional[str] = None
+    summary: Optional[str] = None
+    report_type: Optional[str] = None
+    report_date: Optional[str] = None
+    provider: Optional[str] = None
+    status: str = "active"
 
 
 class DocumentListResponse(BaseModel):

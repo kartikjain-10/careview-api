@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import uuid
 from datetime import date
+from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from langchain_chroma import Chroma
@@ -12,7 +13,8 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pypdf import PdfReader
 
 from app.core.config import Settings
-from app.core.dependencies import get_settings, get_vectorstore
+from app.core.dependencies import get_current_group, get_settings, get_vectorstore, require_family_write
+from app.db import family_repository
 from app.db.database import get_db
 from app.db.document_repository import DocumentRepository
 from app.models.schemas import DocumentListResponse, DocumentMetadata
@@ -22,7 +24,7 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 _splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
 
 
-def _extract_pdf_pages(file_path: str) -> tuple[list[Document], str | None]:
+def _extract_pdf_pages(file_path: str) -> tuple:  # (list[Document], Optional[str])
     """Extract report text without losing the upload if parsing fails."""
     try:
         pages = PyPDFLoader(file_path).load()
@@ -54,12 +56,22 @@ def _extract_pdf_pages(file_path: str) -> tuple[list[Document], str | None]:
 @router.post("/upload", response_model=DocumentMetadata)
 async def upload_document(
     parent_id: str = Form(...),
+    report_type: Optional[str] = Form(None),
+    report_date: Optional[str] = Form(None),
+    provider: Optional[str] = Form(None),
     file: UploadFile = File(...),
+    group: dict = Depends(get_current_group),
+    _membership: dict = Depends(require_family_write),
     settings: Settings = Depends(get_settings),
     vectorstore: Chroma = Depends(get_vectorstore),
 ) -> DocumentMetadata:
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=422, detail="Only PDF files are accepted")
+
+    async with get_db(settings) as db:
+        member = await family_repository.get_member(db, parent_id)
+        if not member or member["group_id"] != group["id"]:
+            raise HTTPException(status_code=404, detail="Family member not found")
 
     # Persist raw PDF to disk
     upload_dir = os.path.join("data", "uploads", parent_id)
@@ -106,6 +118,10 @@ async def upload_document(
             if processing_status == "indexed"
             else f"{file.filename} is uploaded but needs OCR before AI can read it."
         ),
+        report_type=report_type,
+        report_date=report_date,
+        provider=provider,
+        status="active",
     )
 
     async with get_db(settings) as db:
@@ -118,10 +134,41 @@ async def upload_document(
 @router.get("/{parent_id}", response_model=DocumentListResponse)
 async def list_documents(
     parent_id: str,
+    group: dict = Depends(get_current_group),
     settings: Settings = Depends(get_settings),
 ) -> DocumentListResponse:
     async with get_db(settings) as db:
+        member = await family_repository.get_member(db, parent_id)
+        if not member or member["group_id"] != group["id"]:
+            raise HTTPException(status_code=404, detail="Family member not found")
         repo = DocumentRepository(db)
         documents = await repo.get_documents_by_parent(parent_id)
 
     return DocumentListResponse(documents=documents)
+
+
+@router.post("/{document_id}/summary", response_model=DocumentMetadata)
+async def summarize_document(
+    document_id: str,
+    group: dict = Depends(get_current_group),
+    settings: Settings = Depends(get_settings),
+) -> DocumentMetadata:
+    async with get_db(settings) as db:
+        repo = DocumentRepository(db)
+        document = await repo.get_document(document_id)
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+        member = await family_repository.get_member(db, document.parent_id)
+        if not member or member["group_id"] != group["id"]:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        summary = (
+            f"Doctor-ready brief for {member.get('display_name') or member.get('name')}: "
+            f"{document.filename} ({document.report_type or 'health report'}) was uploaded on "
+            f"{document.upload_date}. Status: {document.processing_status}. "
+            "Use this as a concise visit prep note and confirm all medical decisions with a clinician."
+        )
+        updated = await repo.update_summary(document_id, summary)
+        if not updated:
+            raise HTTPException(status_code=404, detail="Document not found")
+        return updated
