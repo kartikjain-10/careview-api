@@ -87,10 +87,11 @@ async def upload_document(
     pages, extraction_error = _extract_pdf_pages(file_path)
     chunks = _splitter.split_documents(pages) if pages else []
 
-    # Attach metadata to every chunk
+    # Attach metadata to every chunk (group_id enables family-wide RAG retrieval)
     for chunk in chunks:
         chunk.metadata.update({
             "parent_id": parent_id,
+            "group_id": group["id"],
             "filename": file.filename,
             "upload_date": upload_date,
             "document_id": document_id,
